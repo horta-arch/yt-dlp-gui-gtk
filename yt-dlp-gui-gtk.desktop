@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Video Downloader (yt-dlp-gui-gtk)
+Exec=yt-dlp-gui-gtk
+Icon=youtube-dl
+Terminal=false
+Type=Application
