@@ -12,8 +12,3 @@ exe = executable('yt-dlp-gui-gtk', 'main.cpp',
     dependencies : gtkmm_dep,
     install : true
 )
-
-# Instalar yt-dlp junto al binario
-install_data('external/yt-dlp',
-    install_dir: join_paths(get_option('prefix'), 'bin')
-)
