@@ -45,7 +45,8 @@ meson compile -C build
 sudo meson install -C build
 ```
 ---
-Esto instalará **yt-dlp-gui-gtk** en /usr/local/bin (o tu prefijo definido)
+Esto instalará **yt-dlp-gui-gtk** en la carpeta build
+### Despues mueve/copia el binario  /usr/bin y asegurate de darle permisos de ejecucion
 
 ---
 ## Estructura del proyecto
