@@ -34,7 +34,7 @@ Permite descargar **video, audio o ambos**, elegir calidad y formato, y gestiona
 Clona el repositorio:
 
 ```bash
-git clone https://github.com/tuusuario/yt-dlp-gui-gtk.git
+git clone https://github.com/horta-arch/yt-dlp-gui-gtk.git
 cd yt-dlp-gui-gtk
 ```
 
@@ -48,14 +48,6 @@ sudo meson install -C build
 Esto instalará **yt-dlp-gui-gtk** en la carpeta build
 ### Despues mueve/copia el binario  /usr/bin y asegurate de darle permisos de ejecucion
 
----
-## Estructura del proyecto
-.
-├── build/                  # Directorio de compilación (Meson)
-├── external/yt-dlp         # Binario de yt-dlp
-├── main.cpp                # Código principal
-├── meson.build             # Build configuration
-└── README.md
 
 ---
 ## Licencia
