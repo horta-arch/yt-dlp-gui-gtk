@@ -8,7 +8,7 @@ project('yt-dlp-gui-gtk', 'cpp',
 
 gtkmm_dep = dependency('gtkmm-4.0', required: true)
 
-exe = executable('yt-dlp-gui', 'main.cpp',
+exe = executable('yt-dlp-gui-gtk', 'main.cpp',
     dependencies : gtkmm_dep,
     install : true
 )
