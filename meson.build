@@ -1,0 +1,19 @@
+project('yt-dlp-gui-gtk', 'cpp',
+    version : '0.1',
+    default_options : [
+        'cpp_std=c++17',
+        'buildtype=release'
+    ]
+)
+
+gtkmm_dep = dependency('gtkmm-4.0', required: true)
+
+exe = executable('yt-dlp-gui', 'main.cpp',
+    dependencies : gtkmm_dep,
+    install : true
+)
+
+# Instalar yt-dlp junto al binario
+install_data('external/yt-dlp',
+    install_dir: join_paths(get_option('prefix'), 'bin')
+)
