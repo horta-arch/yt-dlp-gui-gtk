@@ -19,7 +19,7 @@ public:
     DownloaderWindow()
     {
         set_title("YT-DLP GUI Modern");
-        set_default_size(500, 600);
+        set_default_size(670, 620);
 
         // Cargar la última carpeta seleccionada
         load_last_folder();
