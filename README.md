@@ -56,8 +56,48 @@ MIT License.
 ---
 ## Notas:
  - La aplicación es solo para linux.
- - Asegurate de tener **yt-dlp actualizado** para evitar errores de descarga
+ - Asegurate de tener **yt-dlp actualizado** para evitar errores de descarga.
  - La barra de progreso puede tardar en reflejarse según la salida de yt-dlp.
+
+# Asegurate de tener yt-dlp instalado y en el $PATH global
+
+---
+# Si estas en nix puedes usar esta flake
+```nix
+{
+  description = "Algo";
+
+  outputs = { self, nixpkgs, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+
+      # yt-dlp-gui-gtk
+      yt-dlp-gui-gtk = pkgs.runCommand "yt-dlp-gui-gtk" {} ''
+        mkdir -p $out/bin
+        cp ${./pkgs/yt-dlp-gui-gtk} $out/bin/yt-dlp-gui-gtk
+        chmod +x $out/bin/yt-dlp-gui-gtk
+      '';
+    in
+    {
+      nixosConfigurations = {
+        tu_host = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+
+          modules = [
+            ./configuration.nix
+            ({ pkgs, ... }: {
+              environment.systemPackages = [
+                yt-dlp-gui-gtk
+              ];
+            })
+          ];
+        };
+      };
+      };
+    };
+}
+```
+Reemplaza "tu_host" con tu host y reemplaza tu arquitectura si es necesario.
 
 ---
 # Espero que esta herramienta te sea de ayuda
