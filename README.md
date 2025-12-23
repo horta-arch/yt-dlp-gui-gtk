@@ -1,4 +1,4 @@
-# YT-DLP GUI Modern
+# YT-DLP-GUI-GTK
 
 Una interfaz gráfica moderna para **yt-dlp**, escrita en **C++17** con **GTK4 (gtkmm 4)**.  
 Permite descargar **video, audio o ambos**, elegir calidad y formato, y gestionar múltiples URLs de manera sencilla.
