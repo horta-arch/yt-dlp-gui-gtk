@@ -19,7 +19,7 @@ public:
     DownloaderWindow()
     {
         set_title("YT-DLP GUI Modern");
-        set_default_size(670, 620);
+        set_default_size(670, 650);
 
         // Cargar la última carpeta seleccionada
         load_last_folder();
@@ -32,10 +32,12 @@ public:
 
         // Configurar widgets
         urls_label.set_text("URLs (una por línea):");
-        btn_choose_folder.set_label("Seleccionar carpeta");
+        btn_zenity_folder.set_label("Seleccionar carpeta con Zenity");
         btn_download.set_label("Descargar");
         btn_add_url.set_label("+");
         btn_clear_urls.set_label("Limpiar URLs");
+        folder_label.set_text("Carpeta destino:");
+        folder_entry.set_placeholder_text("Introduce la ruta de la carpeta o usa Zenity...");
 
         // Configurar el TextView para múltiples URLs
         urls_textview.set_wrap_mode(Gtk::WrapMode::WORD_CHAR);
@@ -103,6 +105,13 @@ public:
         url_buttons_box.append(btn_add_url);
         url_buttons_box.append(btn_clear_urls);
 
+        // Crear boxes para folder selection
+        folder_box.set_orientation(Gtk::Orientation::HORIZONTAL);
+        folder_box.set_spacing(5);
+        folder_box.append(folder_entry);
+        folder_box.append(btn_zenity_folder);
+        folder_entry.set_hexpand(true);
+
         // Crear boxes para etiquetas y combos
         video_quality_box.set_orientation(Gtk::Orientation::HORIZONTAL);
         video_quality_box.set_spacing(10);
@@ -138,7 +147,8 @@ public:
         main_box.append(urls_label);
         main_box.append(scrolled_window);
         main_box.append(url_buttons_box);
-        main_box.append(btn_choose_folder);
+        main_box.append(folder_label);
+        main_box.append(folder_box);
         main_box.append(download_type_box);
         main_box.append(video_quality_box);
         main_box.append(video_format_box);
@@ -149,11 +159,12 @@ public:
         main_box.append(btn_download);
 
         // Conectar señales
-        btn_choose_folder.signal_clicked().connect(sigc::mem_fun(*this, &DownloaderWindow::choose_folder));
+        btn_zenity_folder.signal_clicked().connect(sigc::mem_fun(*this, &DownloaderWindow::use_zenity_folder));
         btn_download.signal_clicked().connect(sigc::mem_fun(*this, &DownloaderWindow::start_download));
         btn_add_url.signal_clicked().connect(sigc::mem_fun(*this, &DownloaderWindow::add_url));
         btn_clear_urls.signal_clicked().connect(sigc::mem_fun(*this, &DownloaderWindow::clear_urls));
         download_type_combo.signal_changed().connect(sigc::mem_fun(*this, &DownloaderWindow::on_download_type_changed));
+        folder_entry.signal_changed().connect(sigc::mem_fun(*this, &DownloaderWindow::on_folder_entry_changed));
 
         // Conectar señal de cierre
         signal_hide().connect(sigc::mem_fun(*this, &DownloaderWindow::on_window_hide));
@@ -197,7 +208,7 @@ private:
 
             if (!folder.empty() && fs::exists(folder))
             {
-                btn_choose_folder.set_label("Carpeta: " + Glib::path_get_basename(folder));
+                folder_entry.set_text(folder);
             }
         }
     }
@@ -224,37 +235,102 @@ private:
         }
     }
 
-    void choose_folder()
+    void use_zenity_folder()
     {
-        auto dialog = Gtk::FileChooserNative::create(
-                          "Selecciona carpeta de descarga",
-                          *this,
-                          Gtk::FileChooser::Action::SELECT_FOLDER,
-                          "Seleccionar",
-                          "Cancelar"
-                      );
+        // Deshabilitar el botón mientras se ejecuta Zenity
+        btn_zenity_folder.set_sensitive(false);
 
-        // Establecer la última carpeta seleccionada como predeterminada
+        // Ejecutar Zenity en un hilo separado
+        std::thread([this]()
+        {
+            // Comando para abrir zenity y seleccionar carpeta
+            std::string cmd = "zenity --file-selection --directory --title=\"Selecciona carpeta de descarga\"";
+
+            // Si ya hay una carpeta seleccionada, usarla como carpeta inicial
+            if (!folder.empty() && fs::exists(folder))
+            {
+                cmd += " --filename=\"" + folder + "\"";
+            }
+
+            // Abrir zenity y capturar la salida
+            FILE* pipe = popen(cmd.c_str(), "r");
+            if (!pipe)
+            {
+                // Mostrar error en el hilo principal
+                Glib::signal_idle().connect_once([this]()
+                {
+                    auto dialog = Gtk::make_managed<Gtk::MessageDialog>(*this, "Error al ejecutar Zenity. Asegúrate de que está instalado.",
+                                  false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
+                    dialog->set_hide_on_close(true);
+                    dialog->signal_response().connect([dialog](int response_id)
+                    {
+                        dialog->hide();
+                    });
+                    dialog->show();
+                    btn_zenity_folder.set_sensitive(true);
+                });
+                return;
+            }
+
+            char buffer[1024];
+            std::string result = "";
+
+            if (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+            {
+                result = buffer;
+                // Eliminar el salto de línea
+                result.erase(result.find_last_not_of("\n\r") + 1);
+            }
+
+            pclose(pipe);
+
+            // Actualizar la interfaz en el hilo principal
+            Glib::signal_idle().connect_once([this, result]()
+            {
+                // Si el usuario canceló, result estará vacío
+                if (!result.empty())
+                {
+                    folder = result;
+                    folder_entry.set_text(folder);
+                    save_last_folder();
+                    on_folder_entry_changed(); // Actualizar el icono
+                }
+                btn_zenity_folder.set_sensitive(true);
+            });
+        }).detach();
+    }
+
+    void on_folder_entry_changed()
+    {
+        folder = folder_entry.get_text();
+        // Verificar si la carpeta existe y es accesible
         if (!folder.empty())
         {
-            dialog->set_file(Gio::File::create_for_path(folder));
-        }
-
-        dialog->signal_response().connect([this, dialog](int response_id)
-        {
-            if (response_id == Gtk::ResponseType::ACCEPT)
+            try
             {
-                auto file = dialog->get_file();
-                if (file)
+                if (fs::exists(folder) && fs::is_directory(folder))
                 {
-                    folder = file->get_path();
-                    btn_choose_folder.set_label("Carpeta: " + Glib::path_get_basename(folder));
-                    save_last_folder(); // Guardar la carpeta seleccionada
+                    // La carpeta existe, guardarla
+                    save_last_folder();
+                    folder_entry.set_icon_from_icon_name("folder-symbolic");
+                    folder_entry.set_icon_tooltip_text("Carpeta válida");
+                }
+                else
+                {
+                    folder_entry.set_icon_from_icon_name("dialog-warning-symbolic");
+                    folder_entry.set_icon_tooltip_text("La carpeta no existe");
                 }
             }
-        });
-
-        dialog->show();
+            catch (...)
+            {
+                folder_entry.set_icon_from_icon_name("dialog-error-symbolic");
+                folder_entry.set_icon_tooltip_text("Error al acceder a la carpeta");
+            }
+        }
+        else
+        {
+            folder_entry.set_icon_from_icon_name("");
+        }
     }
 
     void add_url()
@@ -306,18 +382,86 @@ private:
     {
         if (folder.empty())
         {
-            auto dialog = Gtk::AlertDialog::create("Debes seleccionar una carpeta de destino.");
-            dialog->show(*this);
+            auto dialog = Gtk::make_managed<Gtk::MessageDialog>(*this, "Debes seleccionar o escribir una carpeta de destino.",
+                          false, Gtk::MessageType::WARNING, Gtk::ButtonsType::OK, true);
+            dialog->set_hide_on_close(true);
+            dialog->signal_response().connect([dialog](int response_id)
+            {
+                dialog->hide();
+            });
+            dialog->show();
             return;
         }
 
+        // Verificar si la carpeta existe
+        if (!fs::exists(folder))
+        {
+            auto dialog = Gtk::make_managed<Gtk::MessageDialog>(*this,
+                          "La carpeta especificada no existe. ¿Deseas crearla?",
+                          false, Gtk::MessageType::QUESTION, Gtk::ButtonsType::YES_NO, true);
+            dialog->set_secondary_text("Carpeta: " + folder);
+
+            dialog->signal_response().connect([this, dialog](int response_id)
+            {
+                if (response_id == Gtk::ResponseType::YES)
+                {
+                    try
+                    {
+                        if (fs::create_directories(folder))
+                        {
+                            // Carpeta creada, continuar con la descarga
+                            start_download_internal();
+                        }
+                        else
+                        {
+                            auto error_dialog = Gtk::make_managed<Gtk::MessageDialog>(*this,
+                                                "No se pudo crear la carpeta. Verifica los permisos.",
+                                                false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
+                            error_dialog->set_hide_on_close(true);
+                            error_dialog->signal_response().connect([error_dialog](int response_id)
+                            {
+                                error_dialog->hide();
+                            });
+                            error_dialog->show();
+                        }
+                    }
+                    catch (const std::exception& e)
+                    {
+                        auto error_dialog = Gtk::make_managed<Gtk::MessageDialog>(*this,
+                                            "Error al crear la carpeta: " + std::string(e.what()),
+                                            false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
+                        error_dialog->set_hide_on_close(true);
+                        error_dialog->signal_response().connect([error_dialog](int response_id)
+                        {
+                            error_dialog->hide();
+                        });
+                        error_dialog->show();
+                    }
+                }
+                dialog->hide();
+            });
+            dialog->show();
+            return;
+        }
+
+        start_download_internal();
+    }
+
+    void start_download_internal()
+    {
         // Obtener las URLs del TextView
         auto buffer = urls_textview.get_buffer();
         std::string text = buffer->get_text();
         if (text.empty())
         {
-            auto dialog = Gtk::AlertDialog::create("Debes introducir al menos una URL.");
-            dialog->show(*this);
+            auto dialog = Gtk::make_managed<Gtk::MessageDialog>(*this, "Debes introducir al menos una URL.",
+                          false, Gtk::MessageType::WARNING, Gtk::ButtonsType::OK, true);
+            dialog->set_hide_on_close(true);
+            dialog->signal_response().connect([dialog](int response_id)
+            {
+                dialog->hide();
+            });
+            dialog->show();
             return;
         }
 
@@ -340,13 +484,21 @@ private:
 
         if (urls.empty())
         {
-            auto dialog = Gtk::AlertDialog::create("No se encontraron URLs válidas.");
-            dialog->show(*this);
+            auto dialog = Gtk::make_managed<Gtk::MessageDialog>(*this, "No se encontraron URLs válidas.",
+                          false, Gtk::MessageType::WARNING, Gtk::ButtonsType::OK, true);
+            dialog->set_hide_on_close(true);
+            dialog->signal_response().connect([dialog](int response_id)
+            {
+                dialog->hide();
+            });
+            dialog->show();
             return;
         }
 
         // Deshabilitar el botón de descarga durante la descarga
         btn_download.set_sensitive(false);
+        btn_zenity_folder.set_sensitive(false);
+        folder_entry.set_sensitive(false);
         stop_download = false;
         active_downloads = 0;
         completed_downloads = 0;
@@ -546,7 +698,8 @@ private:
 
                 std::string notify_cmd = "notify-send -i dialog-information \"Descargas completadas\" \"Se han descargado " +
                                          std::to_string(completed_downloads) + " " + type_str + " correctamente.\"";
-                std::system(notify_cmd.c_str());
+                int result = std::system(notify_cmd.c_str());
+                (void)result; // Ignorar el resultado
 
                 // Actualizar la UI en el hilo principal
                 Glib::signal_idle().connect_once([this]()
@@ -554,6 +707,8 @@ private:
                     progress_bar.set_fraction(1.0);
                     progress_bar.set_text("100% - Completado");
                     btn_download.set_sensitive(true);
+                    btn_zenity_folder.set_sensitive(true);
+                    folder_entry.set_sensitive(true);
                 });
             }
         }
@@ -592,6 +747,8 @@ private:
                 if (active_downloads == 0 && completed_downloads == total_downloads)
                 {
                     btn_download.set_sensitive(true);
+                    btn_zenity_folder.set_sensitive(true);
+                    folder_entry.set_sensitive(true);
                 }
             }
         });
@@ -605,7 +762,10 @@ private:
     Gtk::Box url_buttons_box{Gtk::Orientation::HORIZONTAL};
     Gtk::Button btn_add_url;
     Gtk::Button btn_clear_urls;
-    Gtk::Button btn_choose_folder;
+    Gtk::Label folder_label;
+    Gtk::Box folder_box{Gtk::Orientation::HORIZONTAL};
+    Gtk::Entry folder_entry;
+    Gtk::Button btn_zenity_folder;
     Gtk::Button btn_download;
     Gtk::Box video_quality_box{Gtk::Orientation::HORIZONTAL};
     Gtk::Label video_quality_label;
@@ -638,6 +798,8 @@ private:
 
 int main(int argc, char *argv[])
 {
+    // Inicializar los threads de GLib
+
     auto app = Gtk::Application::create("org.gtkmm.ytdlp");
 
     // Conectar la señal activate
